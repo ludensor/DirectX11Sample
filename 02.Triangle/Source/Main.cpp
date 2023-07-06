@@ -11,6 +11,13 @@
 
 #define ARRAY_COUNT(a) (sizeof(a) / sizeof(a[0]))
 
+namespace VendorId
+{
+	constexpr uint32_t INTEL = 0x8086;
+	constexpr uint32_t NVIDIA = 0x10DE;
+	constexpr uint32_t AMD = 0x1002;
+}
+
 LPCWSTR Title = TEXT("Direct3D 11 Sample 2 - Rendering a Triangle");
 constexpr int32_t WIN_WIDTH = 1600;
 constexpr int32_t WIN_HEIGHT = 900;
@@ -25,13 +32,6 @@ ID3D11Buffer* VertexBuffer;
 ID3D11InputLayout* InputLayout;
 ID3D11VertexShader* VertexShader;
 ID3D11PixelShader* PixelShader;
-
-namespace VendorId
-{
-	constexpr uint32_t INTEL = 0x8086;
-	constexpr uint32_t NVIDIA = 0x10DE;
-	constexpr uint32_t AMD = 0x1002;
-}
 
 constexpr float CLEAR_COLOR[]{ 0.0f, 0.125f, 0.3f, 1.0f };
 
@@ -93,7 +93,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 		{
 			QueryPerformanceCounter(&currentTime);
 
-			const float deltaTime = (float)(currentTime.QuadPart - prevTime.QuadPart) / cpuTick.QuadPart;
+			const float deltaTime = (currentTime.QuadPart - prevTime.QuadPart) / (float)cpuTick.QuadPart;
 
 			++frameCount;
 			elapsedTime += deltaTime;
@@ -161,7 +161,7 @@ bool InitDevice(HWND hWnd)
 		D3D_FEATURE_LEVEL_11_1,
 		D3D_FEATURE_LEVEL_11_0,
 	};
-	constexpr size_t numFeatureLevels = ARRAY_COUNT(featureLevels);
+	constexpr uint32_t numFeatureLevels = ARRAY_COUNT(featureLevels);
 
 	D3D_FEATURE_LEVEL maxSupportedFeatureLevel;
 	if (FAILED(D3D11CreateDevice(Adapter, D3D_DRIVER_TYPE_UNKNOWN, nullptr, createDeviceFlags, featureLevels, numFeatureLevels, D3D11_SDK_VERSION, &Device, &maxSupportedFeatureLevel, &ImmediateContext)))
@@ -260,7 +260,7 @@ bool InitDevice(HWND hWnd)
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
-	constexpr size_t numElements = ARRAY_COUNT(elements);
+	constexpr uint32_t numElements = ARRAY_COUNT(elements);
 
 	hr = Device->CreateInputLayout(elements, numElements, vertexShaderBlob->GetBufferPointer(), vertexShaderBlob->GetBufferSize(), &InputLayout);
 	referenceCount = vertexShaderBlob->Release();
@@ -340,29 +340,6 @@ void FreeDevice()
 	if (Factory) { referenceCount = Factory->Release(); }
 }
 
-LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-	switch (message)
-	{
-	case WM_KEYDOWN:
-		switch (wParam)
-		{
-		case VK_ESCAPE:
-			PostQuitMessage(0);
-			break;
-		}
-		break;
-
-	case WM_DESTROY:
-		PostQuitMessage(0);
-		break;
-	default:
-		return DefWindowProc(hWnd, message, wParam, lParam);
-	}
-
-	return 0;
-}
-
 HRESULT CompileShader(const void* srcData, size_t srcDataSize, const char* entryPoint, const char* shaderModel, ID3DBlob** outBlob)
 {
 	if (!outBlob)
@@ -404,5 +381,28 @@ HRESULT CompileShader(const void* srcData, size_t srcDataSize, const char* entry
 	*outBlob = shaderCode;
 
 	return hr;
+}
+
+LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+	switch (message)
+	{
+	case WM_KEYDOWN:
+		switch (wParam)
+		{
+		case VK_ESCAPE:
+			PostQuitMessage(0);
+			break;
+		}
+		break;
+
+	case WM_DESTROY:
+		PostQuitMessage(0);
+		break;
+	default:
+		return DefWindowProc(hWnd, message, wParam, lParam);
+	}
+
+	return 0;
 }
 
