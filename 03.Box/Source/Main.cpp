@@ -36,6 +36,18 @@ struct ConstantBufferData
 	XMMATRIX ProjectionMatrix;
 };
 
+enum INPUT_STATE : uint32_t
+{
+	INPUT_NONE		= 0x00000000,
+	INPUT_A			= 0x00000001,
+	INPUT_D			= 0x00000002,
+	INPUT_E			= 0x00000004,
+	INPUT_Q			= 0x00000008,
+	INPUT_S			= 0x00000010,
+	INPUT_W			= 0x00000020,
+	INPUT_RBUTTON	= 0x00000040
+};
+
 struct ControllerState
 {
 	XINPUT_STATE State;
@@ -86,6 +98,8 @@ constexpr int32_t USER_INDEX = 0;
 constexpr float CONTROLLER_THUMB_SENSITIVITY = 1000.0f;
 ControllerState Controller;
 
+uint32_t InputState;
+
 bool InitDevice(HWND hWnd);
 void UpdateControllerState(float deltaTime);
 void Update(float deltaTime);
@@ -99,6 +113,7 @@ void MoveUp(float value);
 void Rotate(float deltaX, float deltaY);
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+INPUT_STATE ConvertVirtualKeyToInputKey(WPARAM wParam);
 
 int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR lpCmdLine, _In_ int nShowCmd)
 {
@@ -508,33 +523,33 @@ void UpdateControllerState(float deltaTime)
 
 void Update(float deltaTime)
 {
-	if (GetAsyncKeyState('W') & 0x8000)
+	if (InputState & INPUT_W)
 	{
 		MoveForward(deltaTime);
 	}
-	else if (GetAsyncKeyState('S') & 0x8000)
+	if (InputState & INPUT_S)
 	{
 		MoveForward(-deltaTime);
 	}
-	if (GetAsyncKeyState('D') & 0x8000)
+	if (InputState & INPUT_D)
 	{
 		MoveRight(deltaTime);
 	}
-	else if (GetAsyncKeyState('A') & 0x8000)
+	if (InputState & INPUT_A)
 	{
 		MoveRight(-deltaTime);
 	}
-	if (GetAsyncKeyState('E') & 0x8000)
+	if (InputState & INPUT_E)
 	{
 		MoveUp(deltaTime);
 	}
-	else if (GetAsyncKeyState('Q') & 0x8000)
+	if (InputState & INPUT_Q)
 	{
 		MoveUp(-deltaTime);
 	}
 
 	static POINT prevCursorPosition;
-	if (GetAsyncKeyState(VK_RBUTTON) & 0x8000)
+	if (InputState & INPUT_RBUTTON)
 	{
 		const float deltaX = (float)(CursorPosition.y - prevCursorPosition.y);
 		const float deltaY = (float)(CursorPosition.x - prevCursorPosition.x);
@@ -546,7 +561,7 @@ void Update(float deltaTime)
 	{
 		MoveUp(-Controller.State.Gamepad.bLeftTrigger / (float)UINT8_MAX * deltaTime);
 	}
-	else if (Controller.State.Gamepad.bRightTrigger)
+	if (Controller.State.Gamepad.bRightTrigger)
 	{
 		MoveUp(Controller.State.Gamepad.bRightTrigger / (float)UINT8_MAX * deltaTime);
 	}
@@ -693,6 +708,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			PostMessage(hWnd, WM_DESTROY, 0, 0);
 			break;
 		}
+		InputState |= ConvertVirtualKeyToInputKey(wParam);
+		break;
+	case WM_KEYUP:
+		InputState &= ~ConvertVirtualKeyToInputKey(wParam);
 		break;
 
 	case WM_MOUSEMOVE:
@@ -705,11 +724,40 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		}
 		break;
 
+	case WM_RBUTTONDOWN:
+		if (!(InputState & INPUT_RBUTTON) && !GetCapture())
+		{
+			SetCapture(hWnd);
+		}
+		InputState |= INPUT_RBUTTON;
+		break;
+	case WM_RBUTTONUP:
+		InputState &= ~INPUT_RBUTTON;
+		if (!(InputState & INPUT_RBUTTON) && GetCapture() == hWnd)
+		{
+			ReleaseCapture();
+		}
+		break;
+
 	case WM_DESTROY:
 		PostQuitMessage(0);
 		return 0;
 	}
 
 	return DefWindowProc(hWnd, message, wParam, lParam);
+}
+
+INPUT_STATE ConvertVirtualKeyToInputKey(WPARAM wParam)
+{
+	switch (wParam)
+	{
+	case 'A': return INPUT_A;
+	case 'D': return INPUT_D;
+	case 'E': return INPUT_E;
+	case 'Q': return INPUT_Q;
+	case 'S': return INPUT_S;
+	case 'W': return INPUT_W;
+	default: return INPUT_NONE;
+	}
 }
 
