@@ -3,4 +3,7 @@
   <ItemGroup>
     <ClCompile Include="MainFramework.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Lighting.hlsl" />
+  </ItemGroup>
 </Project>

@@ -467,8 +467,8 @@ bool InitDevice(HWND hWnd)
 
 	ImmediateContext->IASetInputLayout(InputLayout);
 
-	uint32_t stride = sizeof(VertexData);
-	uint32_t offset = 0;
+	constexpr uint32_t stride = sizeof(VertexData);
+	constexpr uint32_t offset = 0;
 	ImmediateContext->IASetVertexBuffers(0, 1, &VertexBuffer, &stride, &offset);
 
 	ImmediateContext->IASetIndexBuffer(IndexBuffer, DXGI_FORMAT_R16_UINT, 0);

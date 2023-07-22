@@ -3,9 +3,11 @@
 #include <stdio.h>
 
 #include <d3d11.h>
+#include <d3dcompiler.h>
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "d3dcompiler.lib")
 
 #define ARRAY_COUNT(a) (sizeof(a) / sizeof(a[0]))
 
@@ -16,7 +18,7 @@ namespace VendorId
 	constexpr uint32_t AMD = 0x1002;
 }
 
-const WCHAR* Title = TEXT("Direct3D 11 Sample 1 - Device Initialization");
+const WCHAR* Title = TEXT("Direct3D 11 Sample 2 - Rendering a Triangle");
 constexpr int32_t WIN_WIDTH = 1600;
 constexpr int32_t WIN_HEIGHT = 900;
 
@@ -26,12 +28,17 @@ ID3D11Device* Device;
 ID3D11DeviceContext* ImmediateContext;
 IDXGISwapChain* SwapChain;
 ID3D11RenderTargetView* RenderTargetView;
+ID3D11Buffer* VertexBuffer;
+ID3D11InputLayout* InputLayout;
+ID3D11VertexShader* VertexShader;
+ID3D11PixelShader* PixelShader;
 
 constexpr float CLEAR_COLOR[]{ 0.0f, 0.125f, 0.3f, 1.0f };
 
 bool InitDevice(HWND hWnd);
 void Render();
 void FreeDevice();
+HRESULT CompileShader(const void* srcData, size_t srcDataSize, const char* entryPoint, const char* shaderModel, ID3DBlob** outBlob);
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
@@ -197,6 +204,91 @@ bool InitDevice(HWND hWnd)
 		return false;
 	}
 
+	// Create vertex buffer
+	constexpr float vertices[]
+	{
+		// vertex				color
+		+0.0f, +0.5f, +0.5f,	1.0f, 0.0f, 0.0f, 1.0f,
+		+0.5f, -0.5f, +0.5f,	0.0f, 1.0f, 0.0f, 1.0f,
+		-0.5f, -0.5f, +0.5f,	0.0f, 0.0f, 1.0f, 1.0f
+	};
+
+	D3D11_BUFFER_DESC vertexBufferDesc{};
+	vertexBufferDesc.ByteWidth = sizeof(vertices);
+	vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	vertexBufferDesc.CPUAccessFlags = 0;
+
+	D3D11_SUBRESOURCE_DATA vertexBufferData{};
+	vertexBufferData.pSysMem = vertices;
+
+	if (FAILED(Device->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &VertexBuffer)))
+	{
+		return false;
+	}
+
+	// Create vertex shader
+	constexpr char vertexShaderData[] =
+		"struct VS_OUTPUT\
+		{\
+			float4 Position : SV_Position;\
+			float4 Color : COLOR;\
+		};\
+		VS_OUTPUT VS(float4 position : POSITION, float4 color : COLOR)\
+		{\
+			VS_OUTPUT output;\
+			output.Position = position;\
+			output.Color = color;\
+			return output;\
+		}";
+
+	ID3DBlob* vertexShaderBlob;
+	if (FAILED(CompileShader(vertexShaderData, strlen(vertexShaderData), "VS", "vs_4_1", &vertexShaderBlob)))
+	{
+		return false;
+	}
+
+	if (FAILED(Device->CreateVertexShader(vertexShaderBlob->GetBufferPointer(), vertexShaderBlob->GetBufferSize(), nullptr, &VertexShader)))
+	{
+		referenceCount = vertexShaderBlob->Release();
+		return false;
+	}
+
+	// Create input layout
+	constexpr D3D11_INPUT_ELEMENT_DESC elements[]
+	{
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+	};
+	constexpr uint32_t numElements = ARRAY_COUNT(elements);
+
+	hr = Device->CreateInputLayout(elements, numElements, vertexShaderBlob->GetBufferPointer(), vertexShaderBlob->GetBufferSize(), &InputLayout);
+	referenceCount = vertexShaderBlob->Release();
+	if (FAILED(hr))
+	{
+		return false;
+	}
+
+	// Create pixel shader
+	constexpr char pixelShaderData[] =
+		"float4 PS(float4 position : SV_Position, float4 color : COLOR) : SV_Target\
+		{\
+			return color;\
+		}";
+
+	ID3DBlob* pixelShaderBlob;
+	if (FAILED(CompileShader(pixelShaderData, strlen(pixelShaderData), "PS", "ps_4_1", &pixelShaderBlob)))
+	{
+		return false;
+	}
+
+	hr = Device->CreatePixelShader(pixelShaderBlob->GetBufferPointer(), pixelShaderBlob->GetBufferSize(), nullptr, &PixelShader);
+	referenceCount = pixelShaderBlob->Release();
+	if (FAILED(hr))
+	{
+		return false;
+	}
+
 	// Settings
 	ImmediateContext->OMSetRenderTargets(1, &RenderTargetView, nullptr);
 
@@ -209,12 +301,25 @@ bool InitDevice(HWND hWnd)
 	viewport.MaxDepth = 1.0f;
 	ImmediateContext->RSSetViewports(1, &viewport);
 
+	ImmediateContext->IASetInputLayout(InputLayout);
+
+	constexpr uint32_t stride = sizeof(float) * 7;
+	constexpr uint32_t offset = 0;
+	ImmediateContext->IASetVertexBuffers(0, 1, &VertexBuffer, &stride, &offset);
+
+	ImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	ImmediateContext->VSSetShader(VertexShader, nullptr, 0);
+	ImmediateContext->PSSetShader(PixelShader, nullptr, 0);
+
 	return true;
 }
 
 void Render()
 {
 	ImmediateContext->ClearRenderTargetView(RenderTargetView, CLEAR_COLOR);
+	ImmediateContext->Draw(3, 0);
+
 	SwapChain->Present(0, 0);
 }
 
@@ -223,12 +328,59 @@ void FreeDevice()
 	if (ImmediateContext) { ImmediateContext->ClearState(); }
 
 	uint32_t referenceCount = 0;
+	if (PixelShader) { referenceCount = PixelShader->Release(); }
+	if (InputLayout) { referenceCount = InputLayout->Release(); }
+	if (VertexShader) { referenceCount = VertexShader->Release(); }
+	if (VertexBuffer) { referenceCount = VertexBuffer->Release(); }
 	if (RenderTargetView) { referenceCount = RenderTargetView->Release(); }
 	if (SwapChain) { referenceCount = SwapChain->Release(); }
 	if (ImmediateContext) { referenceCount = ImmediateContext->Release(); }
 	if (Device) { referenceCount = Device->Release(); }
 	if (Adapter) { referenceCount = Adapter->Release(); }
 	if (Factory) { referenceCount = Factory->Release(); }
+}
+
+HRESULT CompileShader(const void* srcData, size_t srcDataSize, const char* entryPoint, const char* shaderModel, ID3DBlob** outBlob)
+{
+	if (!outBlob)
+	{
+		return E_FAIL;
+	}
+
+	uint32_t referenceCount = 0;
+
+	uint32_t shaderFlags = D3DCOMPILE_ENABLE_STRICTNESS;
+#ifdef _DEBUG
+	shaderFlags |= D3DCOMPILE_DEBUG;
+#endif // _DEBUG
+
+	ID3DBlob* shaderCode = nullptr;
+	ID3DBlob* errorMessage = nullptr;
+	HRESULT hr = D3DCompile(srcData, srcDataSize, nullptr, nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, entryPoint, shaderModel, shaderFlags, 0, &shaderCode, &errorMessage);
+	if (FAILED(hr))
+	{
+		if (errorMessage)
+		{
+			OutputDebugStringA((char*)errorMessage->GetBufferPointer());
+			referenceCount = errorMessage->Release();
+		}
+	}
+
+	if (shaderCode)
+	{
+		uint32_t disassembleFlags = D3D_DISASM_ENABLE_INSTRUCTION_NUMBERING;
+
+		ID3DBlob* disassembly;
+		if (SUCCEEDED(D3DDisassemble(shaderCode->GetBufferPointer(), shaderCode->GetBufferSize(), disassembleFlags, nullptr, &disassembly)))
+		{
+			OutputDebugStringA((char*)disassembly->GetBufferPointer());
+			referenceCount = disassembly->Release();
+		}
+	}
+
+	*outBlob = shaderCode;
+
+	return hr;
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -246,7 +398,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	case WM_DESTROY:
 		PostQuitMessage(0);
-		break;
+		return 0;
 	}
 
 	return DefWindowProc(hWnd, message, wParam, lParam);
