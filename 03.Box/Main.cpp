@@ -55,7 +55,7 @@ struct ControllerState
 	bool bLockVibration = false;
 };
 
-LPCWSTR Title = TEXT("Direct3D 11 Sample 3 - Rendering a Box and XInput Controller");
+const WCHAR* Title = TEXT("Direct3D 11 Sample 3 - Rendering a Box and XInput Controller");
 constexpr int32_t WIN_WIDTH = 1600;
 constexpr int32_t WIN_HEIGHT = 900;
 POINT CursorPosition;
@@ -175,7 +175,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 				const float fps = (float)frameCount;
 				const float mspf = 1000.0f / fps;
 
-				WCHAR buff[256];
+				WCHAR buff[512];
 				swprintf_s(buff, ARRAY_COUNT(buff), TEXT("%s    fps: %0.2f    mspf: %f"), Title, fps, mspf);
 				SetWindowText(hWnd, buff);
 
@@ -640,7 +640,7 @@ HRESULT CompileShader(const void* srcData, size_t srcDataSize, const char* entry
 #endif // _DEBUG
 
 	ID3DBlob* shaderCode = nullptr;
-	ID3DBlob* errorMessage;
+	ID3DBlob* errorMessage = nullptr;
 	HRESULT hr = D3DCompile(srcData, srcDataSize, nullptr, nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, entryPoint, shaderModel, shaderFlags, 0, &shaderCode, &errorMessage);
 	if (FAILED(hr))
 	{

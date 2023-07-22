@@ -18,7 +18,7 @@ namespace VendorId
 	constexpr uint32_t AMD = 0x1002;
 }
 
-LPCWSTR Title = TEXT("Direct3D 11 Sample 2 - Rendering a Triangle");
+const WCHAR* Title = TEXT("Direct3D 11 Sample 2 - Rendering a Triangle");
 constexpr int32_t WIN_WIDTH = 1600;
 constexpr int32_t WIN_HEIGHT = 900;
 
@@ -102,7 +102,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 				const float fps = (float)frameCount;
 				const float mspf = 1000.0f / fps;
 
-				WCHAR buffer[256];
+				WCHAR buffer[512];
 				swprintf_s(buffer, ARRAY_COUNT(buffer), TEXT("%s    fps: %0.2f    mspf: %f"), Title, fps, mspf);
 				SetWindowText(hWnd, buffer);
 
@@ -355,7 +355,7 @@ HRESULT CompileShader(const void* srcData, size_t srcDataSize, const char* entry
 #endif // _DEBUG
 
 	ID3DBlob* shaderCode = nullptr;
-	ID3DBlob* errorMessage;
+	ID3DBlob* errorMessage = nullptr;
 	HRESULT hr = D3DCompile(srcData, srcDataSize, nullptr, nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, entryPoint, shaderModel, shaderFlags, 0, &shaderCode, &errorMessage);
 	if (FAILED(hr))
 	{
