@@ -1,15 +1,16 @@
-#include <windowsx.h>
+﻿#include <windowsx.h>
 #include <stdint.h>
 #include <stdio.h>
 
 #include <d3d11.h>
 #include <d3dcompiler.h>
+#include <Xinput.h>
 #include <DirectXMath.h>
-#include <cstring>
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
+#pragma comment(lib, "xinput.lib")
 
 #define ARRAY_COUNT(a) (sizeof(a) / sizeof(a[0]))
 
@@ -25,7 +26,7 @@ namespace VendorId
 struct VertexData
 {
 	XMFLOAT3 Position;
-	XMFLOAT3 Normal;
+	XMFLOAT4 Color;
 };
 
 struct ConstantBufferData
@@ -33,25 +34,28 @@ struct ConstantBufferData
 	XMMATRIX WorldMatrix;
 	XMMATRIX ViewMatrix;
 	XMMATRIX ProjectionMatrix;
-	XMVECTOR WorldLightPosition;
-	XMVECTOR WorldCameraPosition;
 };
 
 enum INPUT_STATE : uint32_t
 {
 	INPUT_NONE		= 0x00000000,
-	INPUT_1			= 0x00000001,
-	INPUT_2			= 0x00000002,
-	INPUT_A			= 0x00000004,
-	INPUT_D			= 0x00000008,
-	INPUT_E			= 0x00000010,
-	INPUT_Q			= 0x00000020,
-	INPUT_S			= 0x00000040,
-	INPUT_W			= 0x00000080,
-	INPUT_RBUTTON	= 0x00000100
+	INPUT_A			= 0x00000001,
+	INPUT_D			= 0x00000002,
+	INPUT_E			= 0x00000004,
+	INPUT_Q			= 0x00000008,
+	INPUT_S			= 0x00000010,
+	INPUT_W			= 0x00000020,
+	INPUT_RBUTTON	= 0x00000040
 };
 
-const WCHAR* Title = TEXT("Direct3D 11 Sample 4 - Rendering a Sphere and Lighting    (1: Solid 2: Wireframe)");
+struct ControllerState
+{
+	XINPUT_STATE State;
+	XINPUT_VIBRATION Vibration;
+	bool bLockVibration = false;
+};
+
+const WCHAR* Title = TEXT("Direct3D 11 - Rendering a Box and XInput Controller");
 constexpr int32_t WIN_WIDTH = 1600;
 constexpr int32_t WIN_HEIGHT = 900;
 POINT CursorPosition;
@@ -70,17 +74,11 @@ ID3D11Buffer* ConstantBuffer;
 ID3D11InputLayout* InputLayout;
 ID3D11VertexShader* VertexShader;
 ID3D11PixelShader* PixelShader;
-ID3D11RasterizerState* SolidRasterizerState;
-ID3D11RasterizerState* WireframeRasterizerState;
 
 constexpr float CLEAR_COLOR[]{ 0.0f, 0.125f, 0.3f, 1.0f };
 
 constexpr float OBJECT_ROTATION_SPEED = 45.0f;
-constexpr int32_t SLICE_COUNT = 32;
-constexpr int32_t RING_COUNT = 32;
 XMMATRIX ObjectWorldMatrix;
-
-XMVECTOR LightWorldPosition = XMVectorSet(5.0f, 5.0f, 0.0f, 1.0f);
 
 constexpr float CAMERA_MOVEMENT_SPEED = 10.0f;
 constexpr float CAMERA_ROTATION_SPEED = 0.002f;
@@ -95,13 +93,19 @@ constexpr float NEAR_Z = 0.1f;
 constexpr float FAR_Z = 1000.0f;
 XMMATRIX ProjectionMatrix;
 
+// Controllers
+constexpr int32_t USER_INDEX = 0;
+constexpr float CONTROLLER_THUMB_SENSITIVITY = 1000.0f;
+ControllerState Controller;
+
 uint32_t InputState;
 
 bool InitDevice(HWND hWnd);
+void UpdateControllerState(float deltaTime);
 void Update(float deltaTime);
 void Render();
 void FreeDevice();
-HRESULT CompileShaderFromFile(const WCHAR* fileName, const char* entryPoint, const char* shaderModel, ID3DBlob** outBlob);
+HRESULT CompileShader(const void* srcData, size_t srcDataSize, const char* entryPoint, const char* shaderModel, ID3DBlob** outBlob);
 
 void MoveForward(float value);
 void MoveRight(float value);
@@ -181,6 +185,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 
 			prevTime = currentTime;
 
+			UpdateControllerState(deltaTime);
 			Update(deltaTime);
 			Render();
 		}
@@ -305,38 +310,17 @@ bool InitDevice(HWND hWnd)
 	}
 
 	// Create vertex buffer
-	VertexData vertices[SLICE_COUNT * RING_COUNT + 2];
-
-	// Top
-	vertices[0] = { XMFLOAT3(0.0f, 1.0f, 0.0f), XMFLOAT3(0.0f, 1.0f, 0.0f) };
-
-	// Bottom
-	vertices[ARRAY_COUNT(vertices) - 1] = { XMFLOAT3(0.0f, -1.0f, 0.0f), XMFLOAT3(0.0f, -1.0f, 0.0f) };
-
-	constexpr float deltaThetaAngle = XM_PI / (float)(RING_COUNT + 1);
-	constexpr float deltaPhiAngle = XM_2PI / (float)SLICE_COUNT;
-
-	float theta = 0.0f;
-	for (int32_t ringIndex = 0; ringIndex < RING_COUNT; ++ringIndex)
+	constexpr VertexData vertices[]
 	{
-		theta += deltaThetaAngle;
-
-		float sinTheta, cosTheta;
-		XMScalarSinCos(&sinTheta, &cosTheta, theta);
-
-		float phi = 0.0f;
-		for (int32_t sliceIndex = 0; sliceIndex < SLICE_COUNT; ++sliceIndex)
-		{
-			float sinPhi, cosPhi;
-			XMScalarSinCos(&sinPhi, &cosPhi, phi);
-
-			const int32_t index = ringIndex * SLICE_COUNT + sliceIndex + 1;
-			vertices[index].Position = XMFLOAT3(sinTheta * cosPhi, cosTheta, sinTheta * sinPhi);
-			vertices[index].Normal = XMFLOAT3(sinTheta * cosPhi, cosTheta, sinTheta * sinPhi);
-
-			phi += deltaPhiAngle;
-		}
-	}
+		{ XMFLOAT3(-1.0f, +1.0f, -1.0f), XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f) },
+		{ XMFLOAT3(-1.0f, +1.0f, +1.0f), XMFLOAT4(0.0f, 1.0f, 0.0f, 1.0f) },
+		{ XMFLOAT3(+1.0f, +1.0f, +1.0f), XMFLOAT4(0.0f, 0.0f, 1.0f, 1.0f) },
+		{ XMFLOAT3(+1.0f, +1.0f, -1.0f), XMFLOAT4(1.0f, 1.0f, 0.0f, 1.0f) },
+		{ XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT4(1.0f, 0.0f, 1.0f, 1.0f) },
+		{ XMFLOAT3(-1.0f, -1.0f, +1.0f), XMFLOAT4(0.0f, 1.0f, 1.0f, 1.0f) },
+		{ XMFLOAT3(+1.0f, -1.0f, +1.0f), XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f) },
+		{ XMFLOAT3(+1.0f, -1.0f, -1.0f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f) },
+	};
 
 	D3D11_BUFFER_DESC vertexBufferDesc{};
 	vertexBufferDesc.ByteWidth = sizeof(vertices);
@@ -353,42 +337,26 @@ bool InitDevice(HWND hWnd)
 	}
 
 	// Create index buffer
-	uint16_t indices[SLICE_COUNT * RING_COUNT * 6];
-
-	// Top
-	int32_t index = 0;
-	for (int32_t i = 1; i <= SLICE_COUNT; ++i)
+	constexpr uint16_t indices[]
 	{
-		indices[index++] = 0;
-		indices[index++] = i % SLICE_COUNT + 1;
-		indices[index++] = i;
-	}
+		0, 1, 2,
+		0, 2, 3,
 
-	for (int32_t i = 0; i < RING_COUNT - 1; ++i)
-	{
-		for (int32_t j = 1; j <= SLICE_COUNT; ++j)
-		{
-			const int32_t nextJ = j % SLICE_COUNT + 1;
+		5, 4, 7,
+		5, 7, 6,
 
-			indices[index++] = SLICE_COUNT * i + j;
-			indices[index++] = SLICE_COUNT * (i + 1) + nextJ;
-			indices[index++] = SLICE_COUNT * (i + 1) + j;
+		4, 0, 3,
+		4, 3, 7,
 
-			indices[index++] = SLICE_COUNT * i + j;
-			indices[index++] = SLICE_COUNT * i + nextJ;
-			indices[index++] = SLICE_COUNT * (i + 1) + nextJ;
-		}
-	}
+		6, 2, 1,
+		6, 1, 5,
 
-	// Bottom
-	for (int32_t i = 1; i <= SLICE_COUNT; ++i)
-	{
-		const int32_t baseIndex = SLICE_COUNT * (RING_COUNT - 1);
+		7, 3, 2,
+		7, 2, 6,
 
-		indices[index++] = baseIndex + i;
-		indices[index++] = baseIndex + i % SLICE_COUNT + 1;
-		indices[index++] = SLICE_COUNT * RING_COUNT + 1;
-	}
+		5, 1, 0,
+		5, 0, 4
+	};
 
 	D3D11_BUFFER_DESC indexBufferDesc{};
 	indexBufferDesc.ByteWidth = sizeof(indices);
@@ -416,34 +384,31 @@ bool InitDevice(HWND hWnd)
 		return false;
 	}
 
-	// Create rasterizer state
-	D3D11_RASTERIZER_DESC rasterizerDesc;
-	rasterizerDesc.FillMode = D3D11_FILL_SOLID;
-	rasterizerDesc.CullMode = D3D11_CULL_NONE;
-	rasterizerDesc.FrontCounterClockwise = false;
-	rasterizerDesc.DepthBias = D3D11_DEFAULT_DEPTH_BIAS;
-	rasterizerDesc.DepthBiasClamp = D3D11_DEFAULT_DEPTH_BIAS_CLAMP;
-	rasterizerDesc.SlopeScaledDepthBias = D3D11_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
-	rasterizerDesc.DepthClipEnable = true;
-	rasterizerDesc.ScissorEnable = false;
-	rasterizerDesc.MultisampleEnable = false;
-	rasterizerDesc.AntialiasedLineEnable = false;
-
-	if (FAILED(Device->CreateRasterizerState(&rasterizerDesc, &SolidRasterizerState)))
-	{
-		return false;
-	}
-
-	rasterizerDesc.FillMode = D3D11_FILL_WIREFRAME;
-
-	if (FAILED(Device->CreateRasterizerState(&rasterizerDesc, &WireframeRasterizerState)))
-	{
-		return false;
-	}
-
 	// Create vertex shader
+	constexpr char vertexShaderData[] =
+		"cbuffer ConstantBuffer : register(b0)\
+		{\
+			float4x4 WorldMatrix;\
+			float4x4 ViewMatrix;\
+			float4x4 ProjectionMatrix;\
+		}\
+		struct VS_OUTPUT\
+		{\
+			float4 Position : SV_Position;\
+			float4 Color : COLOR;\
+		};\
+		VS_OUTPUT VS(float4 position : POSITION, float4 color : COLOR)\
+		{\
+			VS_OUTPUT output;\
+			output.Position = mul(position, WorldMatrix);\
+			output.Position = mul(output.Position, ViewMatrix);\
+			output.Position = mul(output.Position, ProjectionMatrix);\
+			output.Color = color;\
+			return output;\
+		}";
+
 	ID3DBlob* vertexShaderBlob;
-	if (FAILED(CompileShaderFromFile(TEXT("Lighting.hlsl"), "VS", "vs_4_1", &vertexShaderBlob)))
+	if (FAILED(CompileShader(vertexShaderData, strlen(vertexShaderData), "VS", "vs_4_1", &vertexShaderBlob)))
 	{
 		return false;
 	}
@@ -458,7 +423,7 @@ bool InitDevice(HWND hWnd)
 	constexpr D3D11_INPUT_ELEMENT_DESC elements[]
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
 	constexpr uint32_t numElements = ARRAY_COUNT(elements);
 
@@ -470,8 +435,14 @@ bool InitDevice(HWND hWnd)
 	}
 
 	// Create pixel shader
+	constexpr char pixelShaderData[] =
+		"float4 PS(float4 position : SV_Position, float4 color : COLOR) : SV_Target\
+		{\
+			return color;\
+		}";
+
 	ID3DBlob* pixelShaderBlob;
-	if (FAILED(CompileShaderFromFile(TEXT("Lighting.hlsl"), "PS", "ps_4_1", &pixelShaderBlob)))
+	if (FAILED(CompileShader(pixelShaderData, strlen(pixelShaderData), "PS", "ps_4_1", &pixelShaderBlob)))
 	{
 		return false;
 	}
@@ -493,7 +464,6 @@ bool InitDevice(HWND hWnd)
 	viewport.MinDepth = 0.0f;
 	viewport.MaxDepth = 1.0f;
 	ImmediateContext->RSSetViewports(1, &viewport);
-	ImmediateContext->RSSetState(SolidRasterizerState);
 
 	ImmediateContext->IASetInputLayout(InputLayout);
 
@@ -512,16 +482,47 @@ bool InitDevice(HWND hWnd)
 	return true;
 }
 
+void UpdateControllerState(float deltaTime)
+{
+	if (XInputGetState(USER_INDEX, &Controller.State) != ERROR_DEVICE_NOT_CONNECTED)
+	{
+		if (Controller.State.Gamepad.sThumbLX < XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE &&
+			Controller.State.Gamepad.sThumbLX > -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE &&
+			Controller.State.Gamepad.sThumbLY < XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE &&
+			Controller.State.Gamepad.sThumbLY > -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
+		{
+			Controller.State.Gamepad.sThumbLX = 0;
+			Controller.State.Gamepad.sThumbLY = 0;
+		}
+
+		if (Controller.State.Gamepad.sThumbRX < XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE &&
+			Controller.State.Gamepad.sThumbRX > -XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE &&
+			Controller.State.Gamepad.sThumbRY < XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE &&
+			Controller.State.Gamepad.sThumbRY > -XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE)
+		{
+			Controller.State.Gamepad.sThumbRX = 0;
+			Controller.State.Gamepad.sThumbRY = 0;
+		}
+
+		Controller.Vibration.wLeftMotorSpeed = Controller.State.Gamepad.bLeftTrigger * 257;
+		Controller.Vibration.wRightMotorSpeed = Controller.State.Gamepad.bRightTrigger * 257;
+
+		if (!Controller.bLockVibration)
+		{
+			static float elapsedTime;
+
+			elapsedTime += deltaTime;
+			if (elapsedTime > 0.05f)
+			{
+				XInputSetState(USER_INDEX, &Controller.Vibration);
+				elapsedTime = 0.0f;
+			}
+		}
+	}
+}
+
 void Update(float deltaTime)
 {
-	if (InputState & INPUT_1)
-	{
-		ImmediateContext->RSSetState(SolidRasterizerState);
-	}
-	if (InputState & INPUT_2)
-	{
-		ImmediateContext->RSSetState(WireframeRasterizerState);
-	}
 	if (InputState & INPUT_W)
 	{
 		MoveForward(deltaTime);
@@ -556,6 +557,29 @@ void Update(float deltaTime)
 	}
 	prevCursorPosition = CursorPosition;
 
+	if (Controller.State.Gamepad.bLeftTrigger)
+	{
+		MoveUp(-Controller.State.Gamepad.bLeftTrigger / (float)UINT8_MAX * deltaTime);
+	}
+	if (Controller.State.Gamepad.bRightTrigger)
+	{
+		MoveUp(Controller.State.Gamepad.bRightTrigger / (float)UINT8_MAX * deltaTime);
+	}
+	if (Controller.State.Gamepad.sThumbLX)
+	{
+		MoveRight(Controller.State.Gamepad.sThumbLX / (float)INT16_MAX * deltaTime);
+	}
+	if (Controller.State.Gamepad.sThumbLY)
+	{
+		MoveForward(Controller.State.Gamepad.sThumbLY / (float)INT16_MAX * deltaTime);
+	}
+	if (Controller.State.Gamepad.sThumbRX || Controller.State.Gamepad.sThumbRY)
+	{
+		const float deltaX = -Controller.State.Gamepad.sThumbRY / (float)INT16_MAX * deltaTime * CONTROLLER_THUMB_SENSITIVITY;
+		const float deltaY = Controller.State.Gamepad.sThumbRX / (float)INT16_MAX * deltaTime * CONTROLLER_THUMB_SENSITIVITY;
+		Rotate(deltaX, deltaY);
+	}
+
 	static float objectRotationAngle;
 	objectRotationAngle += OBJECT_ROTATION_SPEED * deltaTime;
 	ObjectWorldMatrix = XMMatrixRotationY(XMConvertToRadians(objectRotationAngle));
@@ -573,11 +597,9 @@ void Render()
 	constantBufferData.WorldMatrix = XMMatrixTranspose(ObjectWorldMatrix);
 	constantBufferData.ViewMatrix = XMMatrixTranspose(ViewMatrix);
 	constantBufferData.ProjectionMatrix = XMMatrixTranspose(ProjectionMatrix);
-	constantBufferData.WorldLightPosition = LightWorldPosition;
-	constantBufferData.WorldCameraPosition = CameraPosition;
 	ImmediateContext->UpdateSubresource(ConstantBuffer, 0, nullptr, &constantBufferData, 0, 0);
 
-	ImmediateContext->DrawIndexed(SLICE_COUNT * RING_COUNT * 6, 0, 0);
+	ImmediateContext->DrawIndexed(36, 0, 0);
 
 	SwapChain->Present(0, 0);
 }
@@ -587,8 +609,6 @@ void FreeDevice()
 	if (ImmediateContext) { ImmediateContext->ClearState(); }
 
 	uint32_t referenceCount = 0;
-	if (WireframeRasterizerState) { referenceCount = WireframeRasterizerState->Release(); }
-	if (SolidRasterizerState) { referenceCount = SolidRasterizerState->Release(); }
 	if (PixelShader) { referenceCount = PixelShader->Release(); }
 	if (InputLayout) { referenceCount = InputLayout->Release(); }
 	if (VertexShader) { referenceCount = VertexShader->Release(); }
@@ -620,51 +640,8 @@ HRESULT CompileShader(const void* srcData, size_t srcDataSize, const char* entry
 #endif // _DEBUG
 
 	ID3DBlob* shaderCode = nullptr;
-	ID3DBlob* errorMessage;
-	HRESULT hr = D3DCompile(srcData, srcDataSize, nullptr, nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, entryPoint, shaderModel, shaderFlags, 0, &shaderCode, &errorMessage);
-	if (FAILED(hr))
-	{
-		if (errorMessage)
-		{
-			OutputDebugStringA((char*)errorMessage->GetBufferPointer());
-			referenceCount = errorMessage->Release();
-		}
-	}
-
-	if (shaderCode)
-	{
-		uint32_t disassembleFlags = D3D_DISASM_ENABLE_INSTRUCTION_NUMBERING;
-
-		ID3DBlob* disassembly;
-		if (SUCCEEDED(D3DDisassemble(shaderCode->GetBufferPointer(), shaderCode->GetBufferSize(), disassembleFlags, nullptr, &disassembly)))
-		{
-			OutputDebugStringA((char*)disassembly->GetBufferPointer());
-			referenceCount = disassembly->Release();
-		}
-	}
-
-	*outBlob = shaderCode;
-
-	return hr;
-}
-
-HRESULT CompileShaderFromFile(const WCHAR* fileName, const char* entryPoint, const char* shaderModel, ID3DBlob** outBlob)
-{
-	if (!outBlob)
-	{
-		return E_FAIL;
-	}
-
-	uint32_t referenceCount = 0;
-
-	uint32_t shaderFlags = D3DCOMPILE_ENABLE_STRICTNESS;
-#ifdef _DEBUG
-	shaderFlags |= D3DCOMPILE_DEBUG;
-#endif // _DEBUG
-
-	ID3DBlob* shaderCode = nullptr;
 	ID3DBlob* errorMessage = nullptr;
-	HRESULT hr = D3DCompileFromFile(fileName, nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, entryPoint, shaderModel, shaderFlags, 0, &shaderCode, &errorMessage);
+	HRESULT hr = D3DCompile(srcData, srcDataSize, nullptr, nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, entryPoint, shaderModel, shaderFlags, 0, &shaderCode, &errorMessage);
 	if (FAILED(hr))
 	{
 		if (errorMessage)
@@ -774,8 +751,6 @@ INPUT_STATE ConvertVirtualKeyToInputKey(WPARAM wParam)
 {
 	switch (wParam)
 	{
-	case '1': return INPUT_1;
-	case '2': return INPUT_2;
 	case 'A': return INPUT_A;
 	case 'D': return INPUT_D;
 	case 'E': return INPUT_E;
