@@ -36,16 +36,16 @@ struct ConstantBufferData
 	XMMATRIX ProjectionMatrix;
 };
 
-enum InputFlags_ : uint32_t
+enum INPUT_FLAGS : uint32_t
 {
-	InputFlags_None = 0,
-	InputFlags_A = 1 << 0,
-	InputFlags_D = 1 << 1,
-	InputFlags_E = 1 << 2,
-	InputFlags_Q = 1 << 3,
-	InputFlags_S = 1 << 4,
-	InputFlags_W = 1 << 5,
-	InputFlags_RightButton = 1 << 6
+	INPUT_FLAGS_NONE = 0,
+	INPUT_FLAGS_A = 1 << 0,
+	INPUT_FLAGS_D = 1 << 1,
+	INPUT_FLAGS_E = 1 << 2,
+	INPUT_FLAGS_Q = 1 << 3,
+	INPUT_FLAGS_S = 1 << 4,
+	INPUT_FLAGS_W = 1 << 5,
+	INPUT_FLAGS_RBUTTON = 1 << 6
 };
 
 struct ControllerState
@@ -113,7 +113,7 @@ void MoveUp(float value);
 void Rotate(float deltaX, float deltaY);
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
-InputFlags_ ConvertVirtualKeyToInputKey(WPARAM wParam);
+INPUT_FLAGS ConvertVirtualKeyToInputKey(WPARAM wParam);
 
 int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR lpCmdLine, _In_ int nShowCmd)
 {
@@ -523,33 +523,33 @@ void UpdateControllerState(float deltaTime)
 
 void Update(float deltaTime)
 {
-	if (InputFlags & InputFlags_W)
+	if (InputFlags & INPUT_FLAGS_W)
 	{
 		MoveForward(deltaTime);
 	}
-	if (InputFlags & InputFlags_S)
+	if (InputFlags & INPUT_FLAGS_S)
 	{
 		MoveForward(-deltaTime);
 	}
-	if (InputFlags & InputFlags_D)
+	if (InputFlags & INPUT_FLAGS_D)
 	{
 		MoveRight(deltaTime);
 	}
-	if (InputFlags & InputFlags_A)
+	if (InputFlags & INPUT_FLAGS_A)
 	{
 		MoveRight(-deltaTime);
 	}
-	if (InputFlags & InputFlags_E)
+	if (InputFlags & INPUT_FLAGS_E)
 	{
 		MoveUp(deltaTime);
 	}
-	if (InputFlags & InputFlags_Q)
+	if (InputFlags & INPUT_FLAGS_Q)
 	{
 		MoveUp(-deltaTime);
 	}
 
 	static POINT prevCursorPosition;
-	if (InputFlags & InputFlags_RightButton)
+	if (InputFlags & INPUT_FLAGS_RBUTTON)
 	{
 		const float deltaX = (float)(CursorPosition.y - prevCursorPosition.y);
 		const float deltaY = (float)(CursorPosition.x - prevCursorPosition.x);
@@ -725,15 +725,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		break;
 
 	case WM_RBUTTONDOWN:
-		if (!(InputFlags & InputFlags_RightButton) && !GetCapture())
+		if (!(InputFlags & INPUT_FLAGS_RBUTTON) && !GetCapture())
 		{
 			SetCapture(hWnd);
 		}
-		InputFlags |= InputFlags_RightButton;
+		InputFlags |= INPUT_FLAGS_RBUTTON;
 		break;
 	case WM_RBUTTONUP:
-		InputFlags &= ~InputFlags_RightButton;
-		if (!(InputFlags & InputFlags_RightButton) && GetCapture() == hWnd)
+		InputFlags &= ~INPUT_FLAGS_RBUTTON;
+		if (!(InputFlags & INPUT_FLAGS_RBUTTON) && GetCapture() == hWnd)
 		{
 			ReleaseCapture();
 		}
@@ -747,17 +747,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	return DefWindowProc(hWnd, message, wParam, lParam);
 }
 
-InputFlags_ ConvertVirtualKeyToInputKey(WPARAM wParam)
+INPUT_FLAGS ConvertVirtualKeyToInputKey(WPARAM wParam)
 {
 	switch (wParam)
 	{
-	case 'A': return InputFlags_A;
-	case 'D': return InputFlags_D;
-	case 'E': return InputFlags_E;
-	case 'Q': return InputFlags_Q;
-	case 'S': return InputFlags_S;
-	case 'W': return InputFlags_W;
-	default: return InputFlags_None;
+	case 'A': return INPUT_FLAGS_A;
+	case 'D': return INPUT_FLAGS_D;
+	case 'E': return INPUT_FLAGS_E;
+	case 'Q': return INPUT_FLAGS_Q;
+	case 'S': return INPUT_FLAGS_S;
+	case 'W': return INPUT_FLAGS_W;
+	default: return INPUT_FLAGS_NONE;
 	}
 }
 
