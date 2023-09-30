@@ -35,18 +35,18 @@ struct ConstantBufferData
 	XMVECTOR WorldCameraPosition;
 };
 
-enum INPUT_STATE : uint32_t
+enum InputFlags_ : uint32_t
 {
-	INPUT_NONE		= 0x00000000,
-	INPUT_1			= 0x00000001,
-	INPUT_2			= 0x00000002,
-	INPUT_A			= 0x00000004,
-	INPUT_D			= 0x00000008,
-	INPUT_E			= 0x00000010,
-	INPUT_Q			= 0x00000020,
-	INPUT_S			= 0x00000040,
-	INPUT_W			= 0x00000080,
-	INPUT_RBUTTON	= 0x00000100
+	InputFlags_None = 0,
+	InputFlags_1 = 1 << 0,
+	InputFlags_2 = 1 << 1,
+	InputFlags_A = 1 << 2,
+	InputFlags_D = 1 << 3,
+	InputFlags_E = 1 << 4,
+	InputFlags_Q = 1 << 5,
+	InputFlags_S = 1 << 6,
+	InputFlags_W = 1 << 7,
+	InputFlags_RightButton = 1 << 8
 };
 
 const WCHAR* Title = TEXT("Direct3D 11 - Rendering a Sphere and Lighting    (1: Solid 2: Wireframe)");
@@ -93,7 +93,7 @@ constexpr float NEAR_Z = 0.1f;
 constexpr float FAR_Z = 1000.0f;
 XMMATRIX ProjectionMatrix;
 
-uint32_t InputState;
+uint32_t InputFlags;
 
 bool InitDevice(HWND hWnd);
 void Update(float deltaTime);
@@ -107,7 +107,7 @@ void MoveUp(float value);
 void Rotate(float deltaX, float deltaY);
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
-INPUT_STATE ConvertVirtualKeyToInputKey(WPARAM wParam);
+InputFlags_ ConvertVirtualKeyToInputKey(WPARAM wParam);
 
 int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR lpCmdLine, _In_ int nShowCmd)
 {
@@ -512,41 +512,41 @@ bool InitDevice(HWND hWnd)
 
 void Update(float deltaTime)
 {
-	if (InputState & INPUT_1)
+	if (InputFlags & InputFlags_1)
 	{
 		ImmediateContext->RSSetState(SolidRasterizerState);
 	}
-	if (InputState & INPUT_2)
+	if (InputFlags & InputFlags_2)
 	{
 		ImmediateContext->RSSetState(WireframeRasterizerState);
 	}
-	if (InputState & INPUT_W)
+	if (InputFlags & InputFlags_W)
 	{
 		MoveForward(deltaTime);
 	}
-	if (InputState & INPUT_S)
+	if (InputFlags & InputFlags_S)
 	{
 		MoveForward(-deltaTime);
 	}
-	if (InputState & INPUT_D)
+	if (InputFlags & InputFlags_D)
 	{
 		MoveRight(deltaTime);
 	}
-	if (InputState & INPUT_A)
+	if (InputFlags & InputFlags_A)
 	{
 		MoveRight(-deltaTime);
 	}
-	if (InputState & INPUT_E)
+	if (InputFlags & InputFlags_E)
 	{
 		MoveUp(deltaTime);
 	}
-	if (InputState & INPUT_Q)
+	if (InputFlags & InputFlags_Q)
 	{
 		MoveUp(-deltaTime);
 	}
 
 	static POINT prevCursorPoint;
-	if (InputState & INPUT_RBUTTON)
+	if (InputFlags & InputFlags_RightButton)
 	{
 		const float deltaX = (float)(CursorPoint.y - prevCursorPoint.y);
 		const float deltaY = (float)(CursorPoint.x - prevCursorPoint.x);
@@ -729,10 +729,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			PostMessage(hWnd, WM_DESTROY, 0, 0);
 			break;
 		}
-		InputState |= ConvertVirtualKeyToInputKey(wParam);
+		InputFlags |= ConvertVirtualKeyToInputKey(wParam);
 		break;
 	case WM_KEYUP:
-		InputState &= ~ConvertVirtualKeyToInputKey(wParam);
+		InputFlags &= ~ConvertVirtualKeyToInputKey(wParam);
 		break;
 
 	case WM_MOUSEMOVE:
@@ -746,15 +746,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		break;
 
 	case WM_RBUTTONDOWN:
-		if (!(InputState & INPUT_RBUTTON) && !GetCapture())
+		if (!(InputFlags & InputFlags_RightButton) && !GetCapture())
 		{
 			SetCapture(hWnd);
 		}
-		InputState |= INPUT_RBUTTON;
+		InputFlags |= InputFlags_RightButton;
 		break;
 	case WM_RBUTTONUP:
-		InputState &= ~INPUT_RBUTTON;
-		if (!(InputState & INPUT_RBUTTON) && GetCapture() == hWnd)
+		InputFlags &= ~InputFlags_RightButton;
+		if (!(InputFlags & InputFlags_RightButton) && GetCapture() == hWnd)
 		{
 			ReleaseCapture();
 		}
@@ -768,19 +768,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	return DefWindowProc(hWnd, message, wParam, lParam);
 }
 
-INPUT_STATE ConvertVirtualKeyToInputKey(WPARAM wParam)
+InputFlags_ ConvertVirtualKeyToInputKey(WPARAM wParam)
 {
 	switch (wParam)
 	{
-	case '1': return INPUT_1;
-	case '2': return INPUT_2;
-	case 'A': return INPUT_A;
-	case 'D': return INPUT_D;
-	case 'E': return INPUT_E;
-	case 'Q': return INPUT_Q;
-	case 'S': return INPUT_S;
-	case 'W': return INPUT_W;
-	default: return INPUT_NONE;
+	case '1': return InputFlags_1;
+	case '2': return InputFlags_2;
+	case 'A': return InputFlags_A;
+	case 'D': return InputFlags_D;
+	case 'E': return InputFlags_E;
+	case 'Q': return InputFlags_Q;
+	case 'S': return InputFlags_S;
+	case 'W': return InputFlags_W;
+	default: return InputFlags_None;
 	}
 }
 
