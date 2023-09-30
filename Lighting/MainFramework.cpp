@@ -1,17 +1,15 @@
 #include <windowsx.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <vector>
 
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <DirectXMath.h>
-#include <cstring>
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
-
-#define ARRAY_COUNT(a) (sizeof(a) / sizeof(a[0]))
 
 using namespace DirectX;
 
@@ -54,7 +52,7 @@ enum INPUT_STATE : uint32_t
 const WCHAR* Title = TEXT("Direct3D 11 - Rendering a Sphere and Lighting    (1: Solid 2: Wireframe)");
 constexpr int32_t WIN_WIDTH = 1600;
 constexpr int32_t WIN_HEIGHT = 900;
-POINT CursorPosition;
+POINT CursorPoint;
 
 IDXGIFactory* Factory;
 IDXGIAdapter* Adapter;
@@ -172,7 +170,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 				const float mspf = 1000.0f / fps;
 
 				WCHAR buff[512];
-				swprintf_s(buff, ARRAY_COUNT(buff), TEXT("%s    fps: %0.2f    mspf: %f"), Title, fps, mspf);
+				swprintf_s(buff, std::size(buff), TEXT("%s    fps: %0.2f    mspf: %f"), Title, fps, mspf);
 				SetWindowText(hWnd, buff);
 
 				frameCount = 0;
@@ -231,7 +229,7 @@ bool InitDevice(HWND hWnd)
 		D3D_FEATURE_LEVEL_11_1,
 		D3D_FEATURE_LEVEL_11_0
 	};
-	constexpr uint32_t numFeatureLevels = ARRAY_COUNT(featureLevels);
+	constexpr uint32_t numFeatureLevels = (uint32_t)std::size(featureLevels);
 
 	D3D_FEATURE_LEVEL maxSupportedFeatureLevel;
 	if (FAILED(D3D11CreateDevice(Adapter, D3D_DRIVER_TYPE_UNKNOWN, nullptr, createDeviceFlags, featureLevels, numFeatureLevels, D3D11_SDK_VERSION, &Device, &maxSupportedFeatureLevel, &ImmediateContext)))
@@ -305,13 +303,13 @@ bool InitDevice(HWND hWnd)
 	}
 
 	// Create vertex buffer
-	VertexData vertices[SLICE_COUNT * RING_COUNT + 2];
+	std::vector<VertexData> vertices(SLICE_COUNT * RING_COUNT + 2);
 
 	// Top
-	vertices[0] = { XMFLOAT3(0.0f, 1.0f, 0.0f), XMFLOAT3(0.0f, 1.0f, 0.0f) };
+	vertices.front() = { XMFLOAT3(0.0f, 1.0f, 0.0f), XMFLOAT3(0.0f, 1.0f, 0.0f) };
 
 	// Bottom
-	vertices[ARRAY_COUNT(vertices) - 1] = { XMFLOAT3(0.0f, -1.0f, 0.0f), XMFLOAT3(0.0f, -1.0f, 0.0f) };
+	vertices.back() = { XMFLOAT3(0.0f, -1.0f, 0.0f), XMFLOAT3(0.0f, -1.0f, 0.0f) };
 
 	constexpr float deltaThetaAngle = XM_PI / (float)(RING_COUNT + 1);
 	constexpr float deltaPhiAngle = XM_2PI / (float)SLICE_COUNT;
@@ -339,13 +337,13 @@ bool InitDevice(HWND hWnd)
 	}
 
 	D3D11_BUFFER_DESC vertexBufferDesc{};
-	vertexBufferDesc.ByteWidth = sizeof(vertices);
+	vertexBufferDesc.ByteWidth = sizeof(VertexData) * (uint16_t)vertices.size();
 	vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
 	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	vertexBufferDesc.CPUAccessFlags = 0;
 
 	D3D11_SUBRESOURCE_DATA vertexBufferData{};
-	vertexBufferData.pSysMem = vertices;
+	vertexBufferData.pSysMem = vertices.data();
 
 	if (FAILED(Device->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &VertexBuffer)))
 	{
@@ -353,7 +351,7 @@ bool InitDevice(HWND hWnd)
 	}
 
 	// Create index buffer
-	uint16_t indices[SLICE_COUNT * RING_COUNT * 6];
+	std::vector<uint16_t> indices(SLICE_COUNT * RING_COUNT * 6);
 
 	// Top
 	int32_t index = 0;
@@ -391,13 +389,13 @@ bool InitDevice(HWND hWnd)
 	}
 
 	D3D11_BUFFER_DESC indexBufferDesc{};
-	indexBufferDesc.ByteWidth = sizeof(indices);
+	indexBufferDesc.ByteWidth = sizeof(uint16_t) * (uint16_t)indices.size();
 	indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
 	indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
 	indexBufferDesc.CPUAccessFlags = 0;
 
 	D3D11_SUBRESOURCE_DATA indexBufferData{};
-	indexBufferData.pSysMem = indices;
+	indexBufferData.pSysMem = indices.data();
 
 	if (FAILED(Device->CreateBuffer(&indexBufferDesc, &indexBufferData, &IndexBuffer)))
 	{
@@ -460,7 +458,7 @@ bool InitDevice(HWND hWnd)
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
-	constexpr uint32_t numElements = ARRAY_COUNT(elements);
+	constexpr uint32_t numElements = (uint16_t)std::size(elements);
 
 	hr = Device->CreateInputLayout(elements, numElements, vertexShaderBlob->GetBufferPointer(), vertexShaderBlob->GetBufferSize(), &InputLayout);
 	referenceCount = vertexShaderBlob->Release();
@@ -547,14 +545,14 @@ void Update(float deltaTime)
 		MoveUp(-deltaTime);
 	}
 
-	static POINT prevCursorPosition;
+	static POINT prevCursorPoint;
 	if (InputState & INPUT_RBUTTON)
 	{
-		const float deltaX = (float)(CursorPosition.y - prevCursorPosition.y);
-		const float deltaY = (float)(CursorPosition.x - prevCursorPosition.x);
+		const float deltaX = (float)(CursorPoint.y - prevCursorPoint.y);
+		const float deltaY = (float)(CursorPoint.x - prevCursorPoint.x);
 		Rotate(deltaX, deltaY);
 	}
-	prevCursorPosition = CursorPosition;
+	prevCursorPoint = CursorPoint;
 
 	static float objectRotationAngle;
 	objectRotationAngle += OBJECT_ROTATION_SPEED * deltaTime;
@@ -739,11 +737,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	case WM_MOUSEMOVE:
 	case WM_NCMOUSEMOVE:
-		CursorPosition.x = GET_X_LPARAM(lParam);
-		CursorPosition.y = GET_Y_LPARAM(lParam);
+		CursorPoint.x = GET_X_LPARAM(lParam);
+		CursorPoint.y = GET_Y_LPARAM(lParam);
 		if (message == WM_NCMOUSEMOVE)
 		{
-			ScreenToClient(hWnd, &CursorPosition);
+			ScreenToClient(hWnd, &CursorPoint);
 		}
 		break;
 
