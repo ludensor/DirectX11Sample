@@ -1,6 +1,7 @@
 ﻿#include <windowsx.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <algorithm>
 
 #include <d3d11.h>
 #include <d3dcompiler.h>
@@ -11,8 +12,6 @@
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 #pragma comment(lib, "xinput.lib")
-
-#define ARRAY_COUNT(a) (sizeof(a) / sizeof(a[0]))
 
 using namespace DirectX;
 
@@ -175,8 +174,9 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 				const float fps = (float)frameCount;
 				const float mspf = 1000.0f / fps;
 
-				WCHAR buff[512];
-				swprintf_s(buff, ARRAY_COUNT(buff), TEXT("%s    fps: %0.2f    mspf: %f"), Title, fps, mspf);
+				constexpr uint32_t bufferSize = 512;
+				WCHAR buff[bufferSize];
+				swprintf_s(buff, bufferSize, TEXT("%s    fps: %0.2f    mspf: %f"), Title, fps, mspf);
 				SetWindowText(hWnd, buff);
 
 				frameCount = 0;
@@ -236,7 +236,7 @@ bool InitDevice(HWND hWnd)
 		D3D_FEATURE_LEVEL_11_1,
 		D3D_FEATURE_LEVEL_11_0
 	};
-	constexpr uint32_t numFeatureLevels = ARRAY_COUNT(featureLevels);
+	constexpr uint32_t numFeatureLevels = (uint32_t)std::size(featureLevels);
 
 	D3D_FEATURE_LEVEL maxSupportedFeatureLevel;
 	if (FAILED(D3D11CreateDevice(Adapter, D3D_DRIVER_TYPE_UNKNOWN, nullptr, createDeviceFlags, featureLevels, numFeatureLevels, D3D11_SDK_VERSION, &Device, &maxSupportedFeatureLevel, &ImmediateContext)))
@@ -425,7 +425,7 @@ bool InitDevice(HWND hWnd)
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
-	constexpr uint32_t numElements = ARRAY_COUNT(elements);
+	constexpr uint32_t numElements = (uint32_t)std::size(elements);
 
 	hr = Device->CreateInputLayout(elements, numElements, vertexShaderBlob->GetBufferPointer(), vertexShaderBlob->GetBufferSize(), &InputLayout);
 	referenceCount = vertexShaderBlob->Release();

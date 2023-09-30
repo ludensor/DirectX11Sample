@@ -169,8 +169,9 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 				const float fps = (float)frameCount;
 				const float mspf = 1000.0f / fps;
 
-				WCHAR buff[512];
-				swprintf_s(buff, std::size(buff), TEXT("%s    fps: %0.2f    mspf: %f"), Title, fps, mspf);
+				constexpr uint32_t bufferSize = 512;
+				WCHAR buff[bufferSize];
+				swprintf_s(buff, bufferSize, TEXT("%s    fps: %0.2f    mspf: %f"), Title, fps, mspf);
 				SetWindowText(hWnd, buff);
 
 				frameCount = 0;
